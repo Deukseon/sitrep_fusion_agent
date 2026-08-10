@@ -34,6 +34,11 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * EARTH_RADIUS_KM * math.asin(math.sqrt(a))
 
 
+def distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """_haversine_km의 공개 버전. 다른 모듈(예: 시뮬레이터)에서 거리 계산이 필요할 때 재사용."""
+    return _haversine_km(lat1, lon1, lat2, lon2)
+
+
 def _bearing_deg(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """lat1,lon1 지점에서 lat2,lon2 지점을 바라보는 방위각(0~360, 북쪽=0)"""
     phi1, phi2 = math.radians(lat1), math.radians(lat2)

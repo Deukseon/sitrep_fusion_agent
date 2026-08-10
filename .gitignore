@@ -1,0 +1,21 @@
+# 민감정보 - 절대 커밋 금지
+.env
+
+# 파이썬 자동 생성 캐시
+__pycache__/
+*.pyc
+*.pyo
+
+# 실행 중 생성되는 산출물 (재실행하면 다시 생기는 파일들)
+*.jsonl
+threat_map.html
+random_test_map.html
+
+# 가상환경 (혹시 나중에 만들 경우 대비)
+venv/
+.venv/
+
+# OS/에디터 자동 생성 파일
+.DS_Store
+.vscode/
+*.swp

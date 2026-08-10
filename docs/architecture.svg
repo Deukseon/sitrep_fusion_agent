@@ -1,0 +1,64 @@
+<svg width="680" height="640" viewBox="0 0 680 640" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>다중 센서 위협 융합 에이전트 기술 아키텍처</title>
+<desc>외부 API에서 데이터를 수집하여 센서 융합, LangGraph 에이전트의 자동 평가와 사람 승인을 거쳐 브리핑·지도·로그로 출력되는 4계층 구조</desc>
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#5F5E5A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="680" height="640" fill="#FFFFFF"/>
+
+<!-- Layer A: 외부 API (gray) -->
+<rect x="40" y="20" width="600" height="130" rx="16" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="60" y="44" font-family="sans-serif" font-size="14" font-weight="500" fill="#2C2C2A">외부 API</text>
+<rect x="60" y="66" width="272" height="56" rx="10" fill="#D3D1C7" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="196" y="88" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#2C2C2A">OpenSky Network</text>
+<text x="196" y="106" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#444441">실시간 항적(ADS-B)</text>
+<rect x="348" y="66" width="272" height="56" rx="10" fill="#D3D1C7" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="484" y="88" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#2C2C2A">Open-Meteo</text>
+<text x="484" y="106" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#444441">실시간 기상</text>
+
+<line x1="340" y1="150" x2="340" y2="180" stroke="#5F5E5A" stroke-width="1" marker-end="url(#arrow)"/>
+<text x="352" y="169" font-family="sans-serif" font-size="12" fill="#444441">실시간 데이터</text>
+
+<!-- Layer B: 데이터 수집·센서 융합 (teal) -->
+<rect x="40" y="180" width="600" height="130" rx="16" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="60" y="204" font-family="sans-serif" font-size="14" font-weight="500" fill="#04342C">데이터 수집·센서 융합 (data_sources/, fusion/)</text>
+<rect x="60" y="226" width="176" height="56" rx="10" fill="#9FE1CB" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="148" y="246" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#04342C">합성 센서</text>
+<text x="148" y="264" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#085041">레이더·열화상·SIGINT</text>
+<rect x="252" y="226" width="176" height="56" rx="10" fill="#9FE1CB" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="340" y="246" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#04342C">위협 스코어링</text>
+<text x="340" y="264" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#085041">규칙 기반 가산점</text>
+<rect x="444" y="226" width="176" height="56" rx="10" fill="#9FE1CB" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="532" y="246" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#04342C">IFF·보호구역</text>
+<text x="532" y="264" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#085041">피아식별·geofence</text>
+
+<line x1="340" y1="310" x2="340" y2="340" stroke="#5F5E5A" stroke-width="1" marker-end="url(#arrow)"/>
+<text x="352" y="329" font-family="sans-serif" font-size="12" fill="#444441">평가된 트랙</text>
+
+<!-- Layer C: LangGraph 에이전트 (purple + amber) -->
+<rect x="40" y="340" width="600" height="130" rx="16" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+<text x="60" y="364" font-family="sans-serif" font-size="14" font-weight="500" fill="#26215C">LangGraph 에이전트 (agent/graph.py)</text>
+<rect x="60" y="386" width="272" height="56" rx="10" fill="#CECBF6" stroke="#534AB7" stroke-width="0.5"/>
+<text x="196" y="406" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#26215C">자동 파이프라인</text>
+<text x="196" y="424" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#3C3489">수집 → 융합 → 스코어링</text>
+<rect x="348" y="386" width="272" height="56" rx="10" fill="#FAC775" stroke="#854F0B" stroke-width="0.5"/>
+<text x="484" y="406" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#412402">분석관 승인</text>
+<text x="484" y="424" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#633806">interrupt (사람 개입)</text>
+
+<line x1="340" y1="470" x2="340" y2="500" stroke="#5F5E5A" stroke-width="1" marker-end="url(#arrow)"/>
+<text x="352" y="489" font-family="sans-serif" font-size="12" fill="#444441">결정 결과</text>
+
+<!-- Layer D: 출력 (gray) -->
+<rect x="40" y="500" width="600" height="114" rx="16" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="60" y="524" font-family="sans-serif" font-size="14" font-weight="500" fill="#2C2C2A">출력</text>
+<rect x="60" y="546" width="128" height="44" rx="8" fill="#D3D1C7" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="124" y="568" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#2C2C2A">콘솔 브리핑</text>
+<rect x="204" y="546" width="128" height="44" rx="8" fill="#D3D1C7" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="268" y="568" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#2C2C2A">지도 시각화</text>
+<rect x="348" y="546" width="128" height="44" rx="8" fill="#D3D1C7" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="412" y="568" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#2C2C2A">감사 로그</text>
+<rect x="492" y="546" width="128" height="44" rx="8" fill="#D3D1C7" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="556" y="568" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#2C2C2A">동적 감시</text>
+
+<text x="60" y="620" font-family="sans-serif" font-size="12" fill="#5F5E5A">회색 = 외부 연동/산출물 · 청록 = 데이터·센서 융합 · 보라 = LangGraph 에이전트 · 호박 = 사람 개입(분석관 승인)</text>
+</svg>

@@ -16,15 +16,20 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- 감시 구역 설정 ---
-MONITOR_BBOX = (33.0, 124.0, 39.0, 132.0)   # (lamin, lomin, lamax, lomax) - 한반도 근해
-CENTER_LAT = 36.5
-CENTER_LON = 127.8
+# 2026-08-11 변경: 기존 한반도 근해 전체(48제곱도, 2크레딧/회)에서
+# 보호구역(인천/부산·김해) 주변으로 좁힘 (14제곱도, 1크레딧/회).
+# 근거: LangGraph_위협융합_에이전트_진행기록.md의 폴링 간격 검증 결과 —
+#   "가장자리 스침 + 고속 위협"은 30초 이하 간격이 아니면 원천적으로 놓칠 수 있음.
+#   1크레딧/회여야 등록 계정(4000크레딧/일) 기준 21.6초 간격까지 가능해져 30초 목표에 여유가 생김.
+MONITOR_BBOX = (34.5, 125.5, 38.0, 129.5)   # (lamin, lomin, lamax, lomax) - 인천·부산/김해 관제권 포함
+CENTER_LAT = 36.25
+CENTER_LON = 127.5
 
 # --- 위협 스코어링 설정 ---
 ANALYST_REVIEW_THRESHOLD = 55.0   # 이 점수 이상이면 분석관 확인(interrupt) 대상
 
 # --- 동적 감시 설정 ---
-POLL_INTERVAL_SECONDS = 300   # continuous_monitor.py 폴링 주기 (5분)
+POLL_INTERVAL_SECONDS = 30   # continuous_monitor.py 폴링 주기 (5분 -> 30초, 2026-08-11 재조정)
 
 # --- 보호구역(geofence) 설정 ---
 # 예시로 공개적으로 알려진 대형 공항/발전소 좌표를 사용 (실제 군사기지 좌표 아님).

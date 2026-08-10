@@ -48,6 +48,11 @@ def _bearing_deg(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return (math.degrees(math.atan2(x, y)) + 360) % 360
 
 
+def bearing_deg(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """_bearing_deg의 공개 버전. track_history.py에서 이력 기반 방향 재계산에 재사용."""
+    return _bearing_deg(lat1, lon1, lat2, lon2)
+
+
 def check_nearest_zone(lat: float, lon: float, heading_deg: Optional[float],
                         zones: list[dict]) -> GeofenceResult:
     """

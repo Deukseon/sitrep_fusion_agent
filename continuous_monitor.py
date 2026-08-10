@@ -21,14 +21,22 @@ import time
 import logging
 from agent.graph import build_graph, PipelineState, Command, ANALYST_REVIEW_THRESHOLD
 from config import MONITOR_BBOX, CENTER_LAT, CENTER_LON, POLL_INTERVAL_SECONDS
+from fusion.track_history import load_history, save_history, update_history, get_track_history, compute_velocity_from_history
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s - %(message)s", datefmt="%H:%M:%S")
 logger = logging.getLogger(__name__)
 
 
-def run_one_cycle(cycle_num: int) -> None:
+def run_one_cycle(cycle_num: int, history: dict) -> dict:
+    """
+    한 사이클을 실행하고, 갱신된 트랙 이력(history)을 반환한다.
+
+    Phase 3: 사이클마다 새 thread_id로 시작하는 건 그대로다 (LangGraph 파이프라인
+    자체의 상태 지속성은 아직 다음 범위). 다만 이 함수가 별도로 track_history.py를
+    통해 raw_tracks를 이력에 누적시켜서, "같은 항공기를 여러 사이클에 걸쳐 추적"하는
+    문제를 파이프라인 밖에서 먼저 해결한다.
+    """
     app = build_graph()
-    # 사이클마다 다른 thread_id를 써서 이전 사이클의 상태와 섞이지 않게 한다
     graph_config = {"configurable": {"thread_id": f"monitor-cycle-{cycle_num}"}}
 
     initial_state: PipelineState = {
@@ -54,19 +62,48 @@ def run_one_cycle(cycle_num: int) -> None:
     high_count = sum(1 for a in result["assessments"] if a["score"] >= ANALYST_REVIEW_THRESHOLD)
     logger.info("총 %d건 평가, 고위협(HIGH 이상) %d건", total, high_count)
 
+    # --- Phase 3: 트랙 이력 갱신 + 이력 기반 속도/방향 재계산 ---
+    now = time.time()
+    history = update_history(history, result["raw_tracks"], timestamp=now)
+
+    recomputed = 0
+    for t in result["raw_tracks"]:
+        points = get_track_history(history, t["track_id"])
+        vel = compute_velocity_from_history(points)
+        if vel["computed_speed_ms"] is None:
+            continue  # 이번이 첫 관측이라 아직 계산 불가
+        recomputed += 1
+        reported_speed = t.get("speed_ms")
+        speed_diff = None
+        if reported_speed is not None:
+            speed_diff = round(vel["computed_speed_ms"] - reported_speed, 1)
+        logger.info(
+            "  이력 기반 재계산 - %s: 이력 %d점, 계산속도=%sm/s(API보고=%sm/s, 차이=%s), 계산방향=%s도",
+            t["track_id"], vel["history_points"], vel["computed_speed_ms"],
+            reported_speed, speed_diff, vel["computed_heading_deg"],
+        )
+    if recomputed:
+        logger.info("이력 기반 속도/방향 재계산: %d건 (2회 이상 관측된 트랙만 가능)", recomputed)
+
+    return history
+
 
 def main():
     logger.info("동적 감시 시작 (폴링 주기: %d초, Ctrl+C로 중단)", POLL_INTERVAL_SECONDS)
+    history = load_history()
+    logger.info("트랙 이력 로드: 기존 %d개 트랙 이력 발견", len(history))
     cycle = 0
     try:
         while True:
             cycle += 1
             logger.info("--- 사이클 %d 시작 ---", cycle)
-            run_one_cycle(cycle)
+            history = run_one_cycle(cycle, history)
+            save_history(history)
             logger.info("%d초 대기 중...", POLL_INTERVAL_SECONDS)
             time.sleep(POLL_INTERVAL_SECONDS)
     except KeyboardInterrupt:
-        logger.info("감시 종료 (Ctrl+C 입력됨)")
+        save_history(history)
+        logger.info("감시 종료 (Ctrl+C 입력됨, 이력 저장 완료)")
 
 
 if __name__ == "__main__":

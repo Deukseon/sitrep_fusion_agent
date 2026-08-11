@@ -50,6 +50,18 @@ def read_audit_log() -> list[dict]:
         return [json.loads(line) for line in f if line.strip()]
 
 
+def read_recent_alerts(limit: int = 10) -> list[dict]:
+    """
+    실제로 발령된(alert_sent=True) 경보만, 최신순으로 최대 limit건 반환.
+    "pending"(대기 시작 기록)이나 "reject"(보류)는 제외 - 대시보드 경보 이력
+    패널용. 보류 이력까지 보고 싶으면 read_audit_log()로 전체 로그를 직접 확인.
+    """
+    all_entries = read_audit_log()
+    alerts = [e for e in all_entries if e.get("alert_sent") is True]
+    alerts.sort(key=lambda e: e["timestamp"], reverse=True)
+    return alerts[:limit]
+
+
 if __name__ == "__main__":
     log_decision(
         track_id="test001", label="UNKNOWN", score=65.0, level="HIGH",

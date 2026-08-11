@@ -126,6 +126,28 @@ def route_after_assessment(state: PipelineState) -> str:
     return "generate_brief"
 
 
+def log_pending_review(state: PipelineState) -> PipelineState:
+    """
+    3.4. 분석관 확인 "대기 시작" 로그 (analyst_review와 분리된 별도 노드)
+
+    [버그 수정, 2026-08-11] 처음엔 이 로그를 analyst_review 노드 안, interrupt() 호출
+    "직전"에 뒀었는데, LangGraph의 interrupt()는 재개(resume)될 때 노드 함수 전체를
+    처음부터 다시 실행하고 interrupt() 호출 지점에서만 저장된 값을 즉시 반환하는
+    방식이라, interrupt() 이전의 코드가 (최초 대기 시) 1번 + (재개 시 재실행) 1번,
+    총 2번 실행돼서 로그가 중복 기록되는 문제가 있었다. interrupt()가 있는 노드만
+    재개 시 재실행되고 그 "앞" 노드는 재실행되지 않으므로, 이 로그를 별도 노드로
+    분리해서 정확히 한 번만 기록되게 했다.
+    """
+    high_priority = [a for a in state["assessments"] if a["score"] >= ANALYST_REVIEW_THRESHOLD]
+    for t in high_priority:
+        audit_log.log_decision(
+            track_id=t["track_id"], label=t["label"], score=t["score"], level=t["level"],
+            identity=t.get("identity", "UNKNOWN"), decision="pending", alert_sent=False,
+            zone_name=t.get("zone_name"),
+        )
+    return state
+
+
 def analyst_review(state: PipelineState) -> PipelineState:
     """
     3.5. 분석관 확인 대기 (그래프 실행을 여기서 멈춘다)
@@ -134,6 +156,9 @@ def analyst_review(state: PipelineState) -> PipelineState:
     payload가 호출자(사람/UI)에게 반환된다.
     사람이 Command(resume="approve" 또는 "reject")로 재개하면
     아래 코드가 이어서 실행된다.
+
+    [버그 수정, 2026-08-11] "대기 시작" 로그는 log_pending_review 노드로 분리했다
+    (이 노드 자체는 재개 시 재실행되므로 여기엔 재실행돼도 안전한 코드만 남겨야 함).
     """
     high_priority = [a for a in state["assessments"] if a["score"] >= ANALYST_REVIEW_THRESHOLD]
     payload = {
@@ -144,7 +169,8 @@ def analyst_review(state: PipelineState) -> PipelineState:
     state["analyst_decision"] = decision
     logger.info("분석관 결정 수신: %s", decision)
 
-    # 감사 로그: 이 결정이 적용된 고위협 트랙 전부를 기록으로 남긴다
+    # 감사 로그: 실제 결정 결과를 기록. interrupt() "이후" 코드는 재개 시 딱 한 번만
+    # 실행되므로(재실행되는 건 interrupt() 이전 부분뿐) 여기는 원래부터 중복 문제가 없었다.
     alert_sent = (decision == "approve")
     for t in high_priority:
         audit_log.log_decision(
@@ -218,6 +244,7 @@ def build_graph():
     graph.add_node("fuse_sensors", fuse_sensors)
     graph.add_node("predict_trajectory", predict_trajectory)
     graph.add_node("assess_threats", assess_threats)
+    graph.add_node("log_pending_review", log_pending_review)
     graph.add_node("analyst_review", analyst_review)
     graph.add_node("send_alert", send_alert)
     graph.add_node("generate_brief", generate_brief)
@@ -227,12 +254,13 @@ def build_graph():
     graph.add_edge("fuse_sensors", "predict_trajectory")
     graph.add_edge("predict_trajectory", "assess_threats")
 
-    # 조건부 분기 1: 고위협 트랙 존재 여부에 따라 분석관 확인 or 바로 브리핑
+    # 조건부 분기 1: 고위협 트랙 존재 여부에 따라 분석관 확인(대기 로그 먼저) or 바로 브리핑
     graph.add_conditional_edges(
         "assess_threats",
         route_after_assessment,
-        {"analyst_review": "analyst_review", "generate_brief": "generate_brief"},
+        {"analyst_review": "log_pending_review", "generate_brief": "generate_brief"},
     )
+    graph.add_edge("log_pending_review", "analyst_review")
 
     # 조건부 분기 2: 분석관 승인 여부에 따라 경보 발령 or 브리핑만
     graph.add_conditional_edges(

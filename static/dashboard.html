@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>다중 센서 위협 융합 상황실</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: #131a22;
+    --panel-2: #1a232e;
+    --border: #263241;
+    --text: #e7ecf1;
+    --text-muted: #7d8b9a;
+    --critical: #e5484d;
+    --high: #f5a524;
+    --medium: #f0c93a;
+    --low: #4cc38a;
+    --zone: #4a90e2;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px;
+  }
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  header .title { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; letter-spacing: 0.02em; }
+  header .title .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--low); box-shadow: 0 0 6px var(--low); }
+  header .meta { color: var(--text-muted); font-size: 12px; display: flex; gap: 16px; }
+  header .meta span.mono { color: var(--text); }
+
+  main {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 12px;
+    padding: 12px 20px;
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  #map { height: 480px; width: 100%; background: #0e131a; }
+
+  .panel-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  #detail-panel { display: flex; flex-direction: column; height: 480px; }
+  #detail-body { flex: 1; overflow-y: auto; padding: 14px; }
+  .detail-empty { color: var(--text-muted); text-align: center; margin-top: 60px; font-size: 13px; }
+
+  .track-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .track-title .id { font-family: 'IBM Plex Mono', monospace; font-size: 16px; font-weight: 600; }
+  .badge { padding: 3px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; font-family: 'IBM Plex Mono', monospace; }
+  .badge.CRITICAL { background: rgba(229,72,77,0.18); color: var(--critical); }
+  .badge.HIGH { background: rgba(245,165,36,0.18); color: var(--high); }
+  .badge.MEDIUM { background: rgba(240,201,58,0.18); color: var(--medium); }
+  .badge.LOW { background: rgba(76,195,138,0.18); color: var(--low); }
+
+  .kv-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
+  .kv-row span:first-child { color: var(--text-muted); }
+  .kv-row span:last-child { font-family: 'IBM Plex Mono', monospace; }
+
+  .reasons { margin-top: 12px; }
+  .reasons .label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+  .reason-item { font-size: 12.5px; padding: 5px 8px; margin-bottom: 4px; background: var(--panel-2); border-radius: 4px; border-left: 3px solid var(--border); }
+  .reason-item.override { border-left-color: var(--critical); color: #ffb3b5; }
+
+  .actions { display: flex; gap: 8px; padding: 14px; border-top: 1px solid var(--border); }
+  .actions button {
+    flex: 1; padding: 10px; border: none; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .actions button:hover { opacity: 0.85; }
+  .actions button:disabled { opacity: 0.4; cursor: not-allowed; }
+  #btn-approve { background: var(--critical); color: white; }
+  #btn-reject { background: var(--panel-2); color: var(--text); border: 1px solid var(--border) !important; }
+
+  .summary-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 0 20px 12px; }
+  .summary-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; text-align: center; }
+  .summary-card .n { font-family: 'IBM Plex Mono', monospace; font-size: 26px; font-weight: 600; }
+  .summary-card .l { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+
+  #alert-history { margin: 0 20px 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; color: var(--text-muted); font-weight: 500; padding: 8px 14px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); }
+  td { padding: 8px 14px; border-bottom: 1px solid var(--border); font-family: 'IBM Plex Mono', monospace; }
+  .empty-row td { text-align: center; color: var(--text-muted); font-family: 'Inter'; padding: 20px; }
+
+  .leaflet-div-icon { background: transparent; border: none; }
+  .track-label { font-size: 11px; font-weight: 500; white-space: nowrap; text-shadow: -1px -1px 0 #0b0f14, 1px -1px 0 #0b0f14, -1px 1px 0 #0b0f14, 1px 1px 0 #0b0f14, 0 0 3px #0b0f14; }
+  .zone-label { font-size: 11px; color: var(--zone); font-weight: 600; white-space: nowrap; text-shadow: -1px -1px 0 #0b0f14, 1px -1px 0 #0b0f14, -1px 1px 0 #0b0f14, 1px 1px 0 #0b0f14; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title"><span class="dot" id="status-dot"></span> 다중 센서 위협 융합 상황실</div>
+  <div class="meta">
+    감시 상태 <span class="mono" id="status-text">연결 중...</span>
+    · 마지막 갱신 <span class="mono" id="last-updated">-</span>
+    · 폴링 <span class="mono" id="poll-interval">-</span>초
+    · <label style="cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
+        <input type="checkbox" id="toggle-all-labels" style="cursor:pointer;"> 전체 라벨 표시
+      </label>
+  </div>
+</header>
+
+<main>
+  <div class="panel">
+    <div class="panel-header" id="map-panel-header">지도 패널</div>
+    <div id="map"></div>
+  </div>
+
+  <div class="panel" id="detail-panel">
+    <div class="panel-header">선택된 트랙</div>
+    <div id="detail-body"><div class="detail-empty">위협 없음 - 감시 중</div></div>
+    <div class="actions" id="detail-actions" style="display:none;">
+      <button id="btn-approve">경보 발령</button>
+      <button id="btn-reject">보류</button>
+    </div>
+  </div>
+</main>
+
+<div class="summary-strip">
+  <div class="summary-card"><div class="n mono" id="cnt-critical" style="color:var(--critical)">0</div><div class="l">CRITICAL</div></div>
+  <div class="summary-card"><div class="n mono" id="cnt-high" style="color:var(--high)">0</div><div class="l">HIGH</div></div>
+  <div class="summary-card"><div class="n mono" id="cnt-medium" style="color:var(--medium)">0</div><div class="l">MEDIUM</div></div>
+  <div class="summary-card"><div class="n mono" id="cnt-low" style="color:var(--low)">0</div><div class="l">LOW</div></div>
+</div>
+
+<div class="panel" id="alert-history">
+  <div class="panel-header">최근 경보 발령 이력</div>
+  <table>
+    <thead><tr><th>시각</th><th>트랙</th><th>등급 · 점수</th><th>구역</th></tr></thead>
+    <tbody id="alert-history-body"><tr class="empty-row"><td colspan="4">불러오는 중...</td></tr></tbody>
+  </table>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// ============ 설정 ============
+const API_BASE = "";              // 대시보드를 FastAPI가 직접 서빙하므로 같은 오리진 - 빈 문자열이면 상대경로로 호출됨
+const REFRESH_MS = 5000;          // 프론트엔드 자동 갱신 주기 (백엔드 계산 주기 30초와는 별개 - 이미 계산된 결과를 읽어오는 거라 자주 물어봐도 비용 없음)
+const LEVEL_COLOR = { CRITICAL: "#e5484d", HIGH: "#f5a524", MEDIUM: "#f0c93a", LOW: "#4cc38a" };
+const PROTECTED_ZONES = [
+  { name: "인천국제공항 관제권", lat: 37.4602, lon: 126.4407, radius_km: 20 },
+  { name: "부산/김해 관제권", lat: 35.1795, lon: 128.9382, radius_km: 20 },
+];
+
+// ============ 지도 초기화 (실패해도 나머지 화면은 계속 동작하도록 방어) ============
+let map = null;
+let trackLayer = null;
+let mapAvailable = false;
+
+try {
+  map = L.map('map', { zoomControl: true }).setView([36.25, 127.5], 7);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap &copy; CARTO',
+    maxZoom: 19,
+  }).addTo(map);
+
+  PROTECTED_ZONES.forEach(z => {
+    L.circle([z.lat, z.lon], {
+      radius: z.radius_km * 1000, color: "#4a90e2", weight: 1.5, fillOpacity: 0.05,
+    }).addTo(map).bindPopup(`<b>${z.name}</b><br>반경 ${z.radius_km}km`);
+    L.marker([z.lat, z.lon], {
+      icon: L.divIcon({ className: '', html: `<div class="zone-label">🛡 ${z.name}</div>`, iconAnchor: [-8, 18] }),
+    }).addTo(map);
+  });
+
+  trackLayer = L.layerGroup().addTo(map);
+  mapAvailable = true;
+} catch (e) {
+  console.error('지도 라이브러리 로드 실패 - 지도 패널만 비활성화, 나머지 화면은 정상 동작', e);
+  document.getElementById('map').innerHTML =
+    '<div style="display:flex; align-items:center; justify-content:center; height:100%; color:var(--text-muted); font-size:13px;">지도를 불러올 수 없습니다 (네트워크 연결 확인)</div>';
+}
+
+let selectedTrackId = null;   // null이면 "자동으로 최고점수 트랙 선택" 모드
+let showAllLabels = false;    // 헤더의 "전체 라벨 표시" 체크박스로 켜고 끔
+
+function levelColor(level) { return LEVEL_COLOR[level] || "#7d8b9a"; }
+
+function renderTracksOnMap(rawTracks, assessments) {
+  if (!mapAvailable) return;   // 지도 로드 실패 시 조용히 건너뜀 (나머지 화면엔 영향 없음)
+  trackLayer.clearLayers();
+  const byId = Object.fromEntries(assessments.map(a => [a.track_id, a]));
+
+  rawTracks.forEach(t => {
+    if (t.lat == null || t.lon == null) return;
+    const a = byId[t.track_id];
+    const level = a ? a.level : "LOW";
+    const score = a ? a.score : "?";
+    const color = levelColor(level);
+    // 실제 관제 화면처럼 "주목해야 할 것만" 상시 라벨/예측경로를 그린다.
+    // LOW/MEDIUM(평범한 민항기 대부분)은 점만 찍고, 호버로만 정보를 보여준다 -
+    // 그래야 트랙이 수십 개 뜨는 실제 상황에서도 화면이 안 뒤덮인다.
+    const isNotable = level === "HIGH" || level === "CRITICAL" || showAllLabels;
+
+    const marker = L.circleMarker([t.lat, t.lon], {
+      radius: 6, color, fillColor: color, fillOpacity: 0.85, weight: 1.5,
+    }).addTo(trackLayer).on('click', () => selectTrack(t.track_id));
+    marker.bindTooltip(`${t.label} · ${level} ${score}점`, { direction: 'top', opacity: 0.9 });
+
+    // 예측 경로(점선)는 모든 트랙에 그린다 - "몇 분 후"라는 문구는 트랙마다 반복하지 않고
+    // 지도 패널 제목 옆에 한 번만 적어둔다 (모든 트랙이 같은 예측 시간을 쓰므로 반복은 낭비).
+    // 다만 "특정 구역에 진입 예상"이라는 경고는 트랙마다 다른 정보라서 그대로 트랙별로 표시한다.
+    if (a && a.predicted_lat != null && a.predicted_lon != null) {
+      L.polyline([[t.lat, t.lon], [a.predicted_lat, a.predicted_lon]], {
+        color, weight: 2, opacity: isNotable ? 0.7 : 0.4, dashArray: "6,8",
+      }).addTo(trackLayer);
+
+      L.circleMarker([a.predicted_lat, a.predicted_lon], {
+        radius: 3, color, fillColor: color, fillOpacity: 0.6, weight: 1,
+      }).addTo(trackLayer);
+
+      if (a.predicted_zone_name) {
+        const warnHtml = `<div class="track-label" style="color:#ff6b6b; font-weight:700;">⚠ '${a.predicted_zone_name}' 진입 예상</div>`;
+        L.marker([a.predicted_lat, a.predicted_lon], {
+          icon: L.divIcon({ className: '', iconAnchor: [-8, 18], html: warnHtml }),
+        }).addTo(trackLayer);
+      }
+    }
+
+    if (!isNotable) return;   // LOW/MEDIUM은 여기서 끝 - 점 + 예측경로(점선) + 호버 툴팁까지만, 상시 라벨은 없음
+
+    L.marker([t.lat, t.lon], {
+      icon: L.divIcon({
+        className: '', iconAnchor: [-8, -18],
+        html: `<div class="track-label" style="color:${color}">${t.label} · ${level} ${score}점</div>`,
+      }),
+    }).addTo(trackLayer);
+  });
+}
+
+// ============ 상세 패널 ============
+function renderDetailPanel(assessments) {
+  const body = document.getElementById('detail-body');
+  const actions = document.getElementById('detail-actions');
+
+  if (assessments.length === 0) {
+    body.innerHTML = '<div class="detail-empty">위협 없음 - 감시 중</div>';
+    actions.style.display = 'none';
+    return;
+  }
+
+  // 트랙을 직접 선택 안 했으면 점수 최고인 트랙을 자동으로 보여준다 (패널이 비어있지 않게)
+  let track = assessments.find(a => a.track_id === selectedTrackId);
+  if (!track) track = [...assessments].sort((a, b) => b.score - a.score)[0];
+
+  const reasonsHtml = track.reasons.map(r => {
+    const isOverride = r.includes('오버라이드');
+    return `<div class="reason-item ${isOverride ? 'override' : ''}">${r}</div>`;
+  }).join('');
+
+  body.innerHTML = `
+    <div class="track-title">
+      <span class="id">${track.track_id}</span>
+      <span class="badge ${track.level}">${track.level} · ${track.score}점</span>
+    </div>
+    <div class="kv-row"><span>호출부호</span><span>${track.label}</span></div>
+    <div class="kv-row"><span>식별</span><span>${track.identity || 'UNKNOWN'}</span></div>
+    ${track.zone_name ? `<div class="kv-row"><span>인근 보호구역</span><span>${track.zone_name} (${track.zone_distance_km}km)</span></div>` : ''}
+    <div class="reasons">
+      <div class="label">근거 breakdown</div>
+      ${reasonsHtml}
+    </div>
+  `;
+
+  // 승인/거부 버튼은 "분석관 확인 대기 중"일 때만 활성화 (전역 상태 awaitingReview에서 결정)
+  actions.style.display = awaitingReview ? 'flex' : 'none';
+  document.getElementById('btn-approve').onclick = () => submitDecision('approve');
+  document.getElementById('btn-reject').onclick = () => submitDecision('reject');
+}
+
+function selectTrack(trackId) {
+  selectedTrackId = trackId;
+  renderDetailPanel(lastAssessments);
+}
+
+// ============ 요약 스트립 ============
+function renderSummary(assessments) {
+  const counts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+  assessments.forEach(a => { if (counts[a.level] !== undefined) counts[a.level]++; });
+  document.getElementById('cnt-critical').textContent = counts.CRITICAL;
+  document.getElementById('cnt-high').textContent = counts.HIGH;
+  document.getElementById('cnt-medium').textContent = counts.MEDIUM;
+  document.getElementById('cnt-low').textContent = counts.LOW;
+}
+
+// ============ 승인/거부 처리 ============
+let awaitingReview = false;
+let lastAssessments = [];
+let lastRawTracks = [];
+
+async function submitDecision(decision) {
+  document.getElementById('btn-approve').disabled = true;
+  document.getElementById('btn-reject').disabled = true;
+  try {
+    const res = await fetch(`${API_BASE}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decision }),
+    });
+    if (!res.ok) throw new Error(`서버 응답 오류: ${res.status}`);
+    await refresh();   // 승인/거부 직후 화면을 바로 최신 상태로 갱신
+  } catch (e) {
+    alert(`처리 실패: ${e.message}`);
+  } finally {
+    document.getElementById('btn-approve').disabled = false;
+    document.getElementById('btn-reject').disabled = false;
+  }
+}
+
+// ============ 경보 이력 ============
+async function refreshAlertHistory() {
+  try {
+    const res = await fetch(`${API_BASE}/alerts/recent?limit=10`);
+    const data = await res.json();
+    const tbody = document.getElementById('alert-history-body');
+    if (!data.alerts || data.alerts.length === 0) {
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="4">최근 발령된 경보가 없습니다</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.alerts.map(a => `
+      <tr>
+        <td>${a.timestamp}</td>
+        <td>${a.track_id} (${a.label})</td>
+        <td style="color:${levelColor(a.level)}">${a.level} · ${a.score}점</td>
+        <td>${a.zone_name || '-'}</td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    console.error('경보 이력 불러오기 실패', e);
+  }
+}
+
+// ============ 메인 갱신 루프 ============
+async function refresh() {
+  try {
+    const [statusRes, tracksRes] = await Promise.all([
+      fetch(`${API_BASE}/status`),
+      fetch(`${API_BASE}/tracks`),
+    ]);
+    const status = await statusRes.json();
+    const tracks = await tracksRes.json();
+
+    awaitingReview = status.awaiting_review;
+    lastAssessments = tracks.assessments || [];
+    lastRawTracks = tracks.raw_tracks || [];
+
+    document.getElementById('status-dot').style.background = awaitingReview ? '#f5a524' : '#4cc38a';
+    document.getElementById('status-text').textContent = awaitingReview ? '분석관 확인 대기' : '감시 중';
+    document.getElementById('last-updated').textContent = status.last_updated
+      ? new Date(status.last_updated * 1000).toLocaleTimeString('ko-KR') : '-';
+    document.getElementById('poll-interval').textContent = status.poll_interval_seconds;
+
+    renderTracksOnMap(lastRawTracks, lastAssessments);
+    renderDetailPanel(lastAssessments);
+    renderSummary(lastAssessments);
+
+    // 예측 시간(N분)은 모든 트랙이 동일한 값을 쓰므로, 트랙마다 반복하지 않고 패널 제목 옆에 한 번만 표시
+    const withPrediction = lastAssessments.find(a => a.prediction_minutes != null);
+    const header = document.getElementById('map-panel-header');
+    header.textContent = withPrediction
+      ? `지도 패널 · 점선 = ${withPrediction.prediction_minutes.toFixed(0)}분 후 예상 경로`
+      : '지도 패널';
+  } catch (e) {
+    document.getElementById('status-text').textContent = '연결 끊김';
+    document.getElementById('status-dot').style.background = '#e5484d';
+    console.error('갱신 실패', e);
+  }
+}
+
+document.getElementById('toggle-all-labels').addEventListener('change', (e) => {
+  showAllLabels = e.target.checked;
+  renderTracksOnMap(lastRawTracks, lastAssessments);   // 체크 즉시 지도 다시 그리기
+});
+
+refresh();
+refreshAlertHistory();
+setInterval(refresh, REFRESH_MS);
+setInterval(refreshAlertHistory, REFRESH_MS * 2);   // 경보 이력은 자주 안 바뀌니 조금 더 느슨하게
+</script>
+
+</body>
+</html>

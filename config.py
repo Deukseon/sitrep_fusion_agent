@@ -31,6 +31,9 @@ ANALYST_REVIEW_THRESHOLD = 55.0   # 이 점수 이상이면 분석관 확인(int
 # --- 동적 감시 설정 ---
 POLL_INTERVAL_SECONDS = 30   # continuous_monitor.py 폴링 주기 (5분 -> 30초, 2026-08-11 재조정)
 
+# --- 경로 예측 설정 (Phase 4) ---
+PREDICTION_MINUTES = 5.0   # 현재 속도/방향을 유지한다고 가정했을 때 몇 분 뒤 위치를 예측할지
+
 # --- 보호구역(geofence) 설정 ---
 # 예시로 공개적으로 알려진 대형 공항/발전소 좌표를 사용 (실제 군사기지 좌표 아님).
 # name, lat, lon, radius_km: 이 반경 안에 들어오면 위협 스코어링에 가중치를 준다.

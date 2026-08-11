@@ -10,6 +10,7 @@
 import logging
 from agent.graph import build_graph, PipelineState, Command
 from config import MONITOR_BBOX, CENTER_LAT, CENTER_LON
+from fusion.track_history import load_history
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s - %(message)s", datefmt="%H:%M:%S")
 
@@ -19,6 +20,11 @@ def main():
     # checkpointer가 상태를 이 thread_id로 구분해서 저장한다.
     # 세션(사용자, 감시 구역)별로 다른 thread_id를 쓰면 여러 파이프라인을 동시에 운용할 수 있다.
     graph_config = {"configurable": {"thread_id": "prod-session-1"}}
+
+    # Phase 4: continuous_monitor.py가 쌓아둔 이력이 있으면 읽어서 경로 예측에 활용한다.
+    # main.py는 이력을 "쓰지는" 않는다 (읽기 전용) - 두 스크립트를 동시에 켜뒀을 때
+    # 파일 쓰기 충돌이 나지 않도록 이력 파일의 소유권은 continuous_monitor.py에만 둔다.
+    history = load_history()
 
     initial_state: PipelineState = {
         "bbox": MONITOR_BBOX,
@@ -31,6 +37,7 @@ def main():
         "briefing_text": None,
         "analyst_decision": None,
         "alert_sent": False,
+        "track_history": history,
     }
 
     result = app.invoke(initial_state, config=graph_config)

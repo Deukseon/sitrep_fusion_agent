@@ -44,6 +44,7 @@ def run_one_cycle(cycle_num: int, history: dict) -> dict:
         "raw_tracks": [], "enriched_tracks": [], "visibility_ok": True,
         "assessments": [], "briefing_text": None,
         "analyst_decision": None, "alert_sent": False,
+        "track_history": history,   # Phase 4: 이력을 파이프라인에 넘겨 경로 예측에 사용
     }
 
     result = app.invoke(initial_state, config=graph_config)

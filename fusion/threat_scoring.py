@@ -31,6 +31,10 @@ class ThreatAssessment:
     identity_basis: str
     zone_name: Optional[str] = None
     zone_distance_km: Optional[float] = None
+    predicted_lat: Optional[float] = None       # Phase 4: N분 뒤 예상 위도
+    predicted_lon: Optional[float] = None       # Phase 4: N분 뒤 예상 경도
+    prediction_minutes: Optional[float] = None
+    predicted_zone_name: Optional[str] = None   # 예측 위치가 보호구역 안에 들어올 경우만 채워짐
 
     def to_dict(self) -> dict:
         """
@@ -97,6 +101,7 @@ def score_track(enriched_track: dict, visibility_ok: bool = True) -> ThreatAsses
     lat, lon = enriched_track.get("lat"), enriched_track.get("lon")
     heading = enriched_track.get("heading_deg")
     zone_name, zone_distance = None, None
+    geofence = None
     if lat is not None and lon is not None:
         geofence = check_nearest_zone(lat, lon, heading, PROTECTED_ZONES)
         zone_name, zone_distance = geofence.zone_name, geofence.distance_km
@@ -107,7 +112,27 @@ def score_track(enriched_track: dict, visibility_ok: bool = True) -> ThreatAsses
             score += 10
             reasons.append(f"보호구역 '{geofence.zone_name}' 방향으로 접근 중(+10)")
 
-    # 8) 피아식별(IFF) - 위협 점수에는 반영하지 않는 별개의 축. 표시/필터링용 정보로만 사용.
+    # 8) 예측 경로 기반 보호구역 진입 예상 (Phase 4 - TrackHistory 선형 외삽 결과 활용)
+    # 7번의 "접근 중" 판정은 현재 헤딩과 보호구역 방위각의 각도 차이(±60도)로만 근사한 것이라
+    # 정확도에 한계가 있다. 이제 실제 궤적을 외삽한 예측 위치가 있으니, 그 위치가 보호구역
+    # 안에 들어오는지로 훨씬 직접적으로 판단할 수 있다. 이미 현재 위치가 구역 안이면(7번에서
+    # +15 처리됨) 중복 가산하지 않는다.
+    predicted_lat = enriched_track.get("predicted_lat")
+    predicted_lon = enriched_track.get("predicted_lon")
+    prediction_minutes = enriched_track.get("prediction_minutes")
+    predicted_zone_name = None
+    if predicted_lat is not None and predicted_lon is not None:
+        predicted_geofence = check_nearest_zone(predicted_lat, predicted_lon, None, PROTECTED_ZONES)
+        currently_inside = bool(geofence and geofence.inside_zone)
+        if predicted_geofence.inside_zone and not currently_inside:
+            score += 20
+            predicted_zone_name = predicted_geofence.zone_name
+            minutes_label = f"{prediction_minutes:.0f}" if prediction_minutes is not None else "N"
+            reasons.append(
+                f"예측 경로 기준 {minutes_label}분 후 '{predicted_geofence.zone_name}' 진입 예상(+20)"
+            )
+
+    # 9) 피아식별(IFF) - 위협 점수에는 반영하지 않는 별개의 축. 표시/필터링용 정보로만 사용.
     identification = classify_identity(enriched_track.get("label"))
 
     score = round(min(100.0, score), 1)
@@ -121,6 +146,10 @@ def score_track(enriched_track: dict, visibility_ok: bool = True) -> ThreatAsses
         identity_basis=identification.basis,
         zone_name=zone_name,
         zone_distance_km=zone_distance,
+        predicted_lat=predicted_lat,
+        predicted_lon=predicted_lon,
+        prediction_minutes=prediction_minutes,
+        predicted_zone_name=predicted_zone_name,
     )
 
 

@@ -269,6 +269,33 @@ python main.py
 
 ---
 
+## 9. Phase 4 완료 — 경로 예측 (2026-08-11 세션)
+
+### 설계 개요
+
+Phase 3(TrackHistory)이 계산한 "실제 이동 벡터"(속도+방향)를 그대로 밀어서, N분 뒤 위치를 직선으로 추정하는 **선형 외삽**부터 시작했다. 칼만 필터 같은 정교한 기법(관측 노이즈 보정, 가속도 반영)은 이미 지난 세션 `실전_탐지수단_대응표.md`에서 다뤘던 확장 후보로 남겨두고, 지금은 "최근 속도로 계속 직진한다"는 가장 단순한 가정으로 시작.
+
+- **`fusion/trajectory_prediction.py`(신규)**: 구면 삼각법 표준 공식(`destination_point`)으로 출발점+방위각+거리 → 도착 좌표 계산. `predict_position()`이 속도·방향·예측시간(`config.PREDICTION_MINUTES`, 기본 5분)을 받아 예상 위치 반환.
+- **`agent/graph.py` 개조**: `fuse_sensors`와 `assess_threats` 사이에 `predict_trajectory` 노드 추가. `PipelineState`에 `track_history` 필드를 새로 넣어서, TrackHistory가 있으면 그 계산된 벡터를, 없으면(처음 관측된 트랙, 또는 이력 없이 단독 실행) API 원본 순간 속도/방향으로 자연스럽게 폴백.
+- **`fusion/threat_scoring.py` 확장**: 8번 항목으로 "예측 경로 기반 보호구역 진입 예상"을 추가 — 예측 위치가 보호구역에 들어오면 **+20점**. 이미 현재 위치가 구역 안이면(7번 항목에서 +15 처리) 중복 가산하지 않도록 분기 처리.
+- **`visualize_map.py` 확장**: 현재 위치 → 예측 위치를 점선(`PolyLine`, `dash_array`)으로 잇고, 예측 위치에 삼각형 마커(`RegularPolygonMarker`)로 표시. 팝업에 "N분 후 예상 위치" + 보호구역 진입 예상 시 경고 문구.
+- **역할 분리**: TrackHistory 파일(`track_history.json`)의 **쓰기는 `continuous_monitor.py`만** 담당. `main.py`/`visualize_map.py`는 읽기 전용으로만 불러와서 두 스크립트를 동시에 켜둬도 파일 쓰기 충돌이 안 나게 설계.
+
+### 검증 (`test_trajectory_prediction.py`, 목데이터, 3개 항목 전부 통과)
+
+1. 예측 위치가 보호구역에 들어오면 +20 가산되는가 (인천공항 30km 밖에서 직진 시나리오)
+2. 이미 현재 위치가 구역 안이면 8번 항목이 중복 가산하지 않는가
+3. 파이프라인 전체를 이력 없이(API 원본값 폴백) 돌려도 예측이 정상 동작하는가
+
+기존 테스트(`test_interrupt_flow.py`, `test_track_history.py`)도 회귀 없이 전부 통과 확인.
+
+### 아직 안 한 것
+
+- 지도의 예측 마커는 삼각형(방향성 없는 도형)으로만 표시함 — 실제 "화살표" 아이콘까지는 아직 아님. 포트폴리오 완성도를 더 높이고 싶으면 나중에 folium의 커스텀 아이콘/`PolyLineTextPath` 등으로 진짜 화살표 렌더링 고려 가능.
+- 선형 외삽이라 급기동(선회 등)에는 예측이 부정확해짐 — 이건 설계 문서에 명시했고, 칼만 필터가 이 문제의 정석 해법이라는 것도 지난 세션에 정리해둠. 지금 범위에서는 의도적으로 다루지 않음.
+
+---
+
 ## 다음에 해보면 좋을 것
 
 - [x] API 키 개념 이해
@@ -284,8 +311,8 @@ python main.py
 - [x] `.env`에 OpenSky Secret 값 입력 후 실제 실행으로 4000 크레딧 인증 확인
 - [x] A. `.gitignore` 작성 + GitHub 업로드 실습 (Git 협업 트러블슈팅 포함)
 - [x] Phase 3: TrackHistory 구현, 감시구역 축소(48→14제곱도), 폴링간격 재조정(300→30초)
+- [x] Phase 4: 경로 예측(선형 외삽) + 지도 예측경로 표시 + 스코어링 반영
 - [ ] C. FastAPI로 감싸서 배포하기 (관제 대시보드/COP)
-- [ ] 궤적(경로) 예측 — TrackHistory 완료로 이제 착수 가능 (Phase 4)
 - [ ] (선택) LICENSE 추가 — 프로젝트 완성 후 몰아서 진행 예정
 
 세부 일정은 `프로젝트_진행_스케줄.md` 참고.

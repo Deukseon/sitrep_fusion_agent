@@ -9,6 +9,7 @@ LangGraph 파이프라인: 수집 -> 융합 -> 스코어링 -> 브리핑
 """
 import sys
 import os
+import time
 import logging
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -21,7 +22,9 @@ from data_sources.flight_tracker import fetch_tracks
 from data_sources.weather_api import fetch_weather
 from data_sources.synthetic_sensors import enrich_track_with_synthetic_sensors
 from fusion.threat_scoring import score_track, rank_tracks, ThreatAssessment
-from config import ANALYST_REVIEW_THRESHOLD, ANTHROPIC_API_KEY
+from fusion.track_history import get_track_history, compute_velocity_from_history
+from fusion.trajectory_prediction import predict_position
+from config import ANALYST_REVIEW_THRESHOLD, ANTHROPIC_API_KEY, PREDICTION_MINUTES
 import audit_log
 
 logger = logging.getLogger(__name__)
@@ -38,6 +41,7 @@ class PipelineState(TypedDict):
     briefing_text: Optional[str]
     analyst_decision: Optional[str]    # "approve" / "reject" / None(대기중)
     alert_sent: bool
+    track_history: dict                # Phase 3 이력 (선택) - 없으면 이번 관측치만으로 예측 (Phase 4)
 
 
 def fetch_data(state: PipelineState) -> PipelineState:
@@ -56,6 +60,45 @@ def fuse_sensors(state: PipelineState) -> PipelineState:
     enriched = [enrich_track_with_synthetic_sensors(t) for t in state["raw_tracks"]]
     state["enriched_tracks"] = enriched
     logger.info("%d건 센서 융합 완료", len(enriched))
+    return state
+
+
+def predict_trajectory(state: PipelineState) -> PipelineState:
+    """
+    2.5. 경로 예측 (Phase 4)
+
+    트랙 이력(track_history)이 있으면 Phase 3에서 계산한 "실제 이동 벡터"(이력 기반 속도/방향)를,
+    없으면(처음 관측된 트랙, 또는 continuous_monitor.py 없이 main.py 단독 실행 시) API가 준
+    순간 속도/방향을 그대로 써서 N분 뒤 위치를 선형 외삽으로 예측한다.
+    """
+    history = state.get("track_history", {})
+    now = time.time()
+
+    for t in state["enriched_tracks"]:
+        if t.get("lat") is None or t.get("lon") is None:
+            t["predicted_lat"] = None
+            t["predicted_lon"] = None
+            t["prediction_minutes"] = PREDICTION_MINUTES
+            t["velocity_source"] = "no_position"
+            continue
+
+        prior_points = get_track_history(history, t["track_id"])
+        speed, heading, source = None, None, "reported_fallback"
+
+        if prior_points:
+            current_point = {"timestamp": now, "lat": t["lat"], "lon": t["lon"]}
+            vel = compute_velocity_from_history(prior_points + [current_point])
+            if vel["computed_speed_ms"] is not None:
+                speed, heading, source = vel["computed_speed_ms"], vel["computed_heading_deg"], "history"
+
+        if speed is None:  # 이력 없음/부족 -> API 원본 순간값으로 폴백
+            speed, heading = t.get("speed_ms"), t.get("heading_deg")
+
+        pred = predict_position(t["lat"], t["lon"], speed, heading, PREDICTION_MINUTES)
+        t.update(pred)
+        t["velocity_source"] = source if pred["predicted_lat"] is not None else "unavailable"
+
+    logger.info("%d건 경로 예측 완료 (%.0f분 뒤 예상 위치 계산)", len(state["enriched_tracks"]), PREDICTION_MINUTES)
     return state
 
 
@@ -173,6 +216,7 @@ def build_graph():
     graph = StateGraph(PipelineState)
     graph.add_node("fetch_data", fetch_data)
     graph.add_node("fuse_sensors", fuse_sensors)
+    graph.add_node("predict_trajectory", predict_trajectory)
     graph.add_node("assess_threats", assess_threats)
     graph.add_node("analyst_review", analyst_review)
     graph.add_node("send_alert", send_alert)
@@ -180,7 +224,8 @@ def build_graph():
 
     graph.set_entry_point("fetch_data")
     graph.add_edge("fetch_data", "fuse_sensors")
-    graph.add_edge("fuse_sensors", "assess_threats")
+    graph.add_edge("fuse_sensors", "predict_trajectory")
+    graph.add_edge("predict_trajectory", "assess_threats")
 
     # 조건부 분기 1: 고위협 트랙 존재 여부에 따라 분석관 확인 or 바로 브리핑
     graph.add_conditional_edges(

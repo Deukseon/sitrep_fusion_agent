@@ -14,6 +14,7 @@ import logging
 import folium
 from agent.graph import build_graph, PipelineState, Command
 from config import MONITOR_BBOX, CENTER_LAT, CENTER_LON
+from fusion.track_history import load_history
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s - %(message)s", datefmt="%H:%M:%S")
 logger = logging.getLogger(__name__)
@@ -31,11 +32,15 @@ def run_pipeline() -> dict:
     app = build_graph()
     graph_config = {"configurable": {"thread_id": "map-session"}}
 
+    # main.py와 마찬가지로 이력은 읽기 전용으로만 사용 (쓰기는 continuous_monitor.py 담당)
+    history = load_history()
+
     initial_state: PipelineState = {
         "bbox": MONITOR_BBOX, "center_lat": CENTER_LAT, "center_lon": CENTER_LON,
         "raw_tracks": [], "enriched_tracks": [], "visibility_ok": True,
         "assessments": [], "briefing_text": None,
         "analyst_decision": None, "alert_sent": False,
+        "track_history": history,
     }
     result = app.invoke(initial_state, config=graph_config)
 
@@ -91,6 +96,33 @@ def build_map(result: dict) -> folium.Map:
             popup=folium.Popup(popup_html, max_width=250),
         ).add_to(m)
         plotted += 1
+
+        # Phase 4: 예측 경로(점선) + 예상 위치 마커
+        pred_lat = a.get("predicted_lat") if a else None
+        pred_lon = a.get("predicted_lon") if a else None
+        if pred_lat is not None and pred_lon is not None:
+            minutes = a.get("prediction_minutes")
+            folium.PolyLine(
+                locations=[[t["lat"], t["lon"]], [pred_lat, pred_lon]],
+                color=color,
+                weight=2,
+                opacity=0.7,
+                dash_array="6,8",   # 점선 - 현재 위치와 구분되는 "예측"임을 시각적으로 표현
+            ).add_to(m)
+
+            pred_popup = f"<b>{t['label']} - {minutes:.0f}분 후 예상 위치</b>"
+            if a.get("predicted_zone_name"):
+                pred_popup += f"<br>⚠ 보호구역 '{a['predicted_zone_name']}' 진입 예상"
+            folium.RegularPolygonMarker(
+                location=[pred_lat, pred_lon],
+                number_of_sides=3,   # 삼각형 = 화살표 느낌으로 "이동 방향 끝점"을 표시
+                radius=6,
+                color=color,
+                fill=True,
+                fill_color=color,
+                fill_opacity=0.5,
+                popup=folium.Popup(pred_popup, max_width=250),
+            ).add_to(m)
 
     logger.info("지도에 %d건 표시", plotted)
     return m

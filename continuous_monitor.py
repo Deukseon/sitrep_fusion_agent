@@ -74,12 +74,13 @@ def run_one_cycle(cycle_num: int, history: dict) -> dict:
             continue  # 이번이 첫 관측이라 아직 계산 불가
         recomputed += 1
         reported_speed = t.get("speed_ms")
+        altitude = t.get("altitude_m")
         speed_diff = None
         if reported_speed is not None:
             speed_diff = round(vel["computed_speed_ms"] - reported_speed, 1)
         logger.info(
-            "  이력 기반 재계산 - %s: 이력 %d점, 계산속도=%sm/s(API보고=%sm/s, 차이=%s), 계산방향=%s도",
-            t["track_id"], vel["history_points"], vel["computed_speed_ms"],
+            "  이력 기반 재계산 - %s: 고도=%sm, 이력 %d점, 계산속도=%sm/s(API보고=%sm/s, 차이=%s), 계산방향=%s도",
+            t["track_id"], altitude, vel["history_points"], vel["computed_speed_ms"],
             reported_speed, speed_diff, vel["computed_heading_deg"],
         )
     if recomputed:

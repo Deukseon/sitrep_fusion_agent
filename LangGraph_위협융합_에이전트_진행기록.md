@@ -47,7 +47,7 @@ Phase 1 확장분(IFF/geofence/audit log) 리뷰 전체 완료. 4개 파일 모�
 ### Phase 1 완료 상세
 
 - **OpenSky 무료 계정 등록**: 완료. 등록 사용자 전환으로 하루 400 → 4000 크레딧 확보.
-- **`.env` 자동 로드**: `config.py`에서 `load_dotenv()`를 한 번만 호출하도록 통합. `.env.example` 견본 파일 추가.
+- **`.env` 자동 로드**: `config.py`에서 `load_dotenv()`를 한 번만 호출하도록 통합. `.env.example` 견본 파일 추가 (※ 정정: 이 기록엔 있었지만 실제로는 커밋된 적 없었음 — README 인라인 안내로만 대체되어 있었음. 2026-08-11 저장소 보안 점검 중 발견해서 실제로 추가함, 아래 "13" 참고).
 - **`config.py` 신설**: `MONITOR_BBOX`, `CENTER_LAT/LON`, `ANALYST_REVIEW_THRESHOLD`, `POLL_INTERVAL_SECONDS`를 여러 파일에서 한 곳으로 통합. 덤으로 `flight_tracker.py`에 OpenSky 등록 계정 OAuth2 인증(Bearer 토큰 발급·캐싱) 추가 — `.env`에 Client ID/Secret이 있으면 자동으로 인증 요청 사용.
 - **`logging` 전환**: 라이브러리 모듈(`flight_tracker.py`, `agent/graph.py` 등)은 `logger`만 사용하고, 실행 진입점(`main.py`, `continuous_monitor.py`, `visualize_map.py`)에서 `logging.basicConfig`로 타임스탬프 포함 포맷을 설정하는 구조로 정리.
 - **부수 개선**: 코드에 있던 구버전 모델명(`claude-sonnet-4-6`)을 최신 `claude-sonnet-5`로 업데이트.
@@ -403,6 +403,28 @@ Phase 5 대시보드를 실제 데이터로 확인하는 과정에서(트랙 26�
 ### 최종 결론: 구현하지 않음
 
 `MONITOR_BBOX`가 인천/부산 두 곳만 보는 것도, 사실 "국소 감시 구역들의 집합"이라는 개념과 맞아떨어진다 — "안 보는 곳엔 아무것도 없다"는 게 버그가 아니라 실제 센서망의 본질적 특성이라는 재해석. 이 통찰이 "왜 TFR을 안 만들었나"에 대한 훨씬 설득력 있는 답이라고 판단해서, 기능 자체는 스코프에서 뺐다.
+
+---
+
+## 13. 저장소 보안 점검 — 민감정보 노출 여부 재확인 (2026-08-11, 같은 세션 끝)
+
+과거 세션에서 `.gitignore`에 `.env`를 등록해뒀던 게 실제로 잘 작동해왔는지 재점검 요청이 있어서, GitHub 저장소를 새로 클론해서 전체 커밋 이력을 검사했다.
+
+### 점검 항목과 결과
+
+| 항목 | 결과 |
+|---|---|
+| `.gitignore`에 `.env` 등록 여부 | ✅ 정상 |
+| 현재 워킹트리에 `.env` 파일 존재 여부 | ✅ 없음 (정상 — 커밋 대상에서 제외됨) |
+| **전체 커밋 이력**(`git log --all --full-history`)에 `.env`가 한 번이라도 포함된 적 있는지 | ✅ 없음 |
+| 코드/문서에 실제 키 값이 하드코딩된 흔적(`sk-ant-`, `sk-proj-` 패턴 검색, 과거 커밋 포함) | ✅ 없음 (README의 `sk-ant-...`는 형식 예시일 뿐 실제 키 아님) |
+| `audit_log.jsonl`, `track_history.json` 등 실행 산출물이 커밋됐는지 | ✅ 없음 |
+
+**결론: 지금까지 단 한 번도 민감정보가 GitHub에 노출된 적 없음.** `.gitignore`가 최초 커밋부터 지금까지 의도대로 작동해왔다.
+
+### 점검 중 발견한 사소한 불일치
+
+Phase 1 완료 기록에 "`.env.example` 견본 파일 추가"라고 적혀 있었지만, 실제 저장소엔 이 파일이 없었다 (README 인라인 안내로 대체되어 있었음 — 기능상 문제는 없었지만 기록과 실제가 어긋나 있었음). 이번에 `.env.example`을 실제로 추가해서 기록과 상태를 일치시켰다. 필요한 환경변수(`ANTHROPIC_API_KEY`, `OPENSKY_CLIENT_ID`, `OPENSKY_CLIENT_SECRET`)에 대한 설명과 기본값(빈 값)을 담았다.
 
 ---
 

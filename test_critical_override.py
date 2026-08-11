@@ -95,6 +95,39 @@ def test_history_backed_prediction_forces_critical():
     print(f"✅ 점수={result.score}, 등급={result.level}, 근거: {[r for r in result.reasons if '오버라이드' in r]}")
 
 
+def test_persistence_gate_holds_sensor_only_critical():
+    print("\n=== 테스트 6: 구역과 무관한 '센서 신호만' CRITICAL은 단일 관측 시 HIGH로 보류 ===")
+    sensor_only_track = {
+        "track_id": "SENSORONLY01", "label": "UNKNOWN", "lat": 30.0, "lon": 120.0,   # 어느 보호구역과도 무관한 좌표
+        "altitude_m": 900, "speed_ms": 180, "heading_deg": 90,
+        "radar": {"rcs_dbsm": 3.2, "detection_confidence": 0.91},
+        "thermal": {"is_hot": True},
+        "sigint": {"emission_detected": True, "frequency_band": "unknown", "signal_strength_db": -40},
+        # velocity_source 없음 -> 이번이 첫 관측이라는 뜻
+    }
+    result = score_track(sensor_only_track, visibility_ok=True)
+    assert result.level == "HIGH", f"단일 관측인데 CRITICAL이 나왔습니다! (등급={result.level}, 점수={result.score})"
+    assert any("단일 관측" in r for r in result.reasons), "지속성 게이트 근거 문구가 없습니다"
+    print(f"✅ 단일 관측: 점수={result.score} -> {result.level}로 보류됨")
+
+    print("   같은 조건에서 이력이 뒷받침되면(velocity_source=history) CRITICAL로 격상되는지 확인:")
+    sensor_only_track["velocity_source"] = "history"
+    result2 = score_track(sensor_only_track, visibility_ok=True)
+    assert result2.level == "CRITICAL", f"이력이 뒷받침됐는데도 CRITICAL이 안 나왔습니다 (등급={result2.level})"
+    assert not any("단일 관측" in r for r in result2.reasons)
+    print(f"   ✅ 재관측(history): 점수={result2.score} -> {result2.level}로 자동 격상")
+
+    print("   구역 내부 위치(직접 관측 사실)는 단일 관측이어도 게이트 영향 안 받는지 확인:")
+    inside_zone_track = {
+        "track_id": "INSIDEONLY01", "label": "UNKNOWN", "lat": INCHEON["lat"], "lon": INCHEON["lon"],
+        "altitude_m": 900, "speed_ms": 180, "heading_deg": 90,
+        "radar": {}, "thermal": {}, "sigint": {},
+    }
+    result3 = score_track(inside_zone_track, visibility_ok=True)
+    assert result3.level == "CRITICAL", f"구역 내부 오버라이드가 지속성 게이트에 막혔습니다 (등급={result3.level})"
+    print(f"   ✅ 구역 내부(단일 관측): 점수={result3.score} -> {result3.level} (게이트 영향 없음, 정상)")
+
+
 def test_no_duplicate_override_text():
     print("\n=== 테스트 4: 원래도 80점 넘는 경우 오버라이드 문구 중복 안 붙음 ===")
     track = {
@@ -117,4 +150,5 @@ if __name__ == "__main__":
     test_predicted_entry_not_overridden()
     test_no_duplicate_override_text()
     test_history_backed_prediction_forces_critical()
+    test_persistence_gate_holds_sensor_only_critical()
     print("\n🎉 CRITICAL 오버라이드 규칙 테스트 전체 통과")

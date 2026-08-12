@@ -191,7 +191,24 @@ def score_track(enriched_track: dict, visibility_ok: bool = True) -> ThreatAsses
     currently_inside_zone = bool(geofence and geofence.inside_zone)
     prediction_confirmed_by_history = predicted_inside and velocity_source == "history"
 
-    if is_unidentified and score < 80 and (currently_inside_zone or prediction_confirmed_by_history):
+    # 이착륙 패턴 예외 (2026-08-11, 실제 데이터로 대시보드 확인 중 발견)
+    #
+    # 배경: 지금 보호구역(인천/부산·김해)은 실제로는 대한민국에서 가장 붐비는 민간
+    # 국제공항이다. "미확인 + 구역 내부 = CRITICAL"이라는 하드 트리거는 원래 "아무도
+    # 없어야 할 군사 보호구역에 뭔가 들어왔다"를 전제로 설계했는데, 실제 공항 좌표에
+    # 씌워보니 하루 종일 착륙·이륙하는 정상 여객기가 계속 이 조건을 충족시켜서 CRITICAL
+    # 오탐이 반복되는 게 실제 데이터로 확인됐다. (근본 원인은 "보호구역 자체가 실제로는
+    # 상시 트래픽이 있는 민간공항"이라는 점 - 이건 진행기록에 알려진 한계로 별도 기록.)
+    #
+    # 완화책: 수직속도(climb_rate_ms)가 뚜렷하면(상승/하강 중, 임계값 1.5m/s) 이착륙
+    # 절차 중일 가능성이 매우 높다고 보고, 하드 트리거 오버라이드 대상에서 제외한다.
+    # 대신 점수 누적(7·8번) 방식으로는 여전히 평가되므로, 완전히 무시되는 건 아니다.
+    # 한계: 이건 완벽한 판별이 아니다 - 하강하는 척하며 접근하는 위협은 여전히 못 거른다.
+    climb_rate = enriched_track.get("climb_rate_ms")
+    likely_takeoff_or_landing = climb_rate is not None and abs(climb_rate) >= 1.5
+
+    if is_unidentified and score < 80 and (currently_inside_zone or prediction_confirmed_by_history) \
+            and not likely_takeoff_or_landing:
         score = 80.0
         if currently_inside_zone:
             reasons.append(
@@ -202,6 +219,10 @@ def score_track(enriched_track: dict, visibility_ok: bool = True) -> ThreatAsses
                 f"규칙 기반 오버라이드: 미확인 물체가 이력 기반 궤적상 보호구역 '{predicted_zone_name}' 진입이 "
                 f"확실시됨(2회 이상 실관측 뒷받침) -> CRITICAL 강제 지정"
             )
+    elif is_unidentified and (currently_inside_zone or prediction_confirmed_by_history) and likely_takeoff_or_landing:
+        reasons.append(
+            f"수직속도 {climb_rate:+.1f}m/s로 이착륙 패턴 추정 -> CRITICAL 강제 지정 제외(점수 누적 방식으로만 평가)"
+        )
 
     # 10) 피아식별(IFF) - 위협 점수에는 반영하지 않는 별개의 축. 표시/필터링용 정보로만 사용.
     identification = classify_identity(enriched_track.get("label"))

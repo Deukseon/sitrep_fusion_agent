@@ -273,9 +273,19 @@ function renderDetailPanel(assessments) {
   let track = assessments.find(a => a.track_id === selectedTrackId);
   if (!track) track = [...assessments].sort((a, b) => b.score - a.score)[0];
 
+  // 고도/속도/수직속도는 assessments가 아니라 raw_tracks에 있는 필드라 track_id로 매칭해서 찾는다.
+  // (예: 착륙 중인 여객기인지 눈으로 직접 검증할 때 필요 - 2026-08-11 실제 데이터로 확인하다 빠진 걸 발견)
+  const raw = lastRawTracks.find(t => t.track_id === track.track_id);
+  const climbLabel = (raw && raw.climb_rate_ms != null)
+    ? (raw.climb_rate_ms > 1.5 ? `상승 중 (+${raw.climb_rate_ms.toFixed(1)}m/s)`
+       : raw.climb_rate_ms < -1.5 ? `하강 중 (${raw.climb_rate_ms.toFixed(1)}m/s)`
+       : `수평비행 (${raw.climb_rate_ms.toFixed(1)}m/s)`)
+    : '정보 없음';
+
   const reasonsHtml = track.reasons.map(r => {
     const isOverride = r.includes('오버라이드');
-    return `<div class="reason-item ${isOverride ? 'override' : ''}">${r}</div>`;
+    const isException = r.includes('제외');
+    return `<div class="reason-item ${isOverride ? 'override' : ''}" style="${isException ? 'border-left-color:var(--low); color:#9be8c4;' : ''}">${r}</div>`;
   }).join('');
 
   body.innerHTML = `
@@ -285,6 +295,9 @@ function renderDetailPanel(assessments) {
     </div>
     <div class="kv-row"><span>호출부호</span><span>${track.label}</span></div>
     <div class="kv-row"><span>식별</span><span>${track.identity || 'UNKNOWN'}</span></div>
+    ${raw ? `<div class="kv-row"><span>고도</span><span>${raw.altitude_m != null ? raw.altitude_m.toFixed(0) + 'm' : '-'}</span></div>` : ''}
+    ${raw ? `<div class="kv-row"><span>속도</span><span>${raw.speed_ms != null ? raw.speed_ms.toFixed(0) + 'm/s' : '-'}</span></div>` : ''}
+    ${raw ? `<div class="kv-row"><span>수직속도</span><span>${climbLabel}</span></div>` : ''}
     ${track.zone_name ? `<div class="kv-row"><span>인근 보호구역</span><span>${track.zone_name} (${track.zone_distance_km}km)</span></div>` : ''}
     <div class="reasons">
       <div class="label">근거 breakdown</div>

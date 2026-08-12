@@ -9,13 +9,20 @@
 경우만 확인하는 것이므로, 여기서도 놓치면 실제 상황은 더 나쁘다고 봐야 함).
 
 사용법:
-  python test_polling_detection.py
+  탐색용 표 전체 출력: python test_polling_detection.py
+  회귀 테스트만 실행: pytest test_polling_detection.py -v
+    (Phase 3에서 실제로 내렸던 결론 - "POLL_INTERVAL_SECONDS=30이면 최악의
+    경우(가장자리 스침+초음속)도 탐지된다"를 고정된 assert로 못박아둔다.
+    나중에 크레딧 절약 등의 이유로 이 값을 다시 늘리면 이 테스트가 깨져서
+    바로 알아챌 수 있다.)
 """
 import math
 
+import pytest
+
 from synthetic_flight_path import SyntheticFlightPath, bearing_to
 from fusion.geofence import distance_km
-from config import PROTECTED_ZONES
+from config import PROTECTED_ZONES, POLL_INTERVAL_SECONDS
 
 # 검증할 속도 목록 (m/s)
 SPEED_SCENARIOS = {
@@ -92,7 +99,8 @@ def run_scenario(zone: dict, speed_ms: float, poll_interval: float,
     }
 
 
-def main():
+def _print_exploration_tables():
+    """탐색용: 속도x간격x오프셋 조합 전체를 표로 눈으로 확인 (pytest 대상 아님)"""
     zone = PROTECTED_ZONES[0]  # 인천국제공항 관제권
     radius = zone["radius_km"]
     print(f"검증 대상 보호구역: {zone['name']} (반경 {radius}km)\n")
@@ -127,6 +135,47 @@ def main():
     print(f"→ 탐지 성공 여부: {detail['detected']}")
     if detail["true_entered_zone"] and not detail["detected"]:
         print("⚠ 실제로는 구역에 진입했지만, 폴링 시점이 안 맞아 시스템은 전혀 눈치채지 못함")
+
+
+# ============ 회귀 테스트 (Phase 3에서 실제로 내린 설계 결론을 못박음) ============
+
+def test_current_poll_interval_catches_worst_case():
+    """
+    현재 설정(POLL_INTERVAL_SECONDS=30)이면, 가장자리를 스치는 초음속(600m/s) 위협도
+    탐지된다는 게 Phase 3의 결론이었다. 이 값이 나중에 다시 늘어나면 이 테스트가 깨진다.
+    """
+    zone = PROTECTED_ZONES[0]
+    result = run_scenario(zone, speed_ms=600, poll_interval=POLL_INTERVAL_SECONDS,
+                           offset_km=zone["radius_km"] * 0.9)
+    assert result["true_entered_zone"], "테스트 시나리오 자체가 실제로 구역에 진입 안 함 - 시나리오 설계 오류"
+    assert result["detected"], (
+        f"현재 폴링 간격({POLL_INTERVAL_SECONDS}초)으로는 가장자리 스침+초음속 위협을 놓칩니다! "
+        f"Phase 3에서 이 값을 30초로 정한 이유가 무너졌으니 config.py를 재검토해야 합니다."
+    )
+
+
+def test_slow_poll_interval_misses_edge_scrape():
+    """
+    반대로, 예전에 쓰던 느린 간격(300초=5분)으로는 같은 시나리오를 실제로 놓친다는 걸
+    보여준다 - "왜 30초로 좁혔는지"의 근거를 재현 가능한 테스트로 남겨둠.
+    """
+    zone = PROTECTED_ZONES[0]
+    result = run_scenario(zone, speed_ms=600, poll_interval=300,
+                           offset_km=zone["radius_km"] * 0.9)
+    assert result["true_entered_zone"], "테스트 시나리오 자체가 실제로 구역에 진입 안 함 - 시나리오 설계 오류"
+    assert not result["detected"], "5분 간격이면 놓쳐야 하는 시나리오인데 탐지됐습니다 - 예상과 다름, 재검토 필요"
+
+
+@pytest.mark.parametrize("speed_label,speed_ms", list(SPEED_SCENARIOS.items()))
+def test_center_pass_always_detected_at_current_interval(speed_label, speed_ms):
+    """정중앙 관통(가장 관대한 조건)은 어떤 속도라도 현재 폴링 간격에서 항상 탐지돼야 함"""
+    zone = PROTECTED_ZONES[0]
+    result = run_scenario(zone, speed_ms=speed_ms, poll_interval=POLL_INTERVAL_SECONDS, offset_km=0.0)
+    assert result["detected"], f"{speed_label}이 정중앙 관통인데도 놓쳤습니다 - 심각한 회귀"
+
+
+def main():
+    _print_exploration_tables()
 
 
 if __name__ == "__main__":

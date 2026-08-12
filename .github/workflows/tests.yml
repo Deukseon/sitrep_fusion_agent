@@ -1,0 +1,28 @@
+name: 테스트
+
+# main 브랜치에 push하거나 PR을 올릴 때마다 자동으로 pytest 23개를 돌린다.
+# 실제 OpenSky/Anthropic API 키 없이도 전부 목데이터로 검증되므로,
+# 이 저장소를 처음 받는 사람도 별도 설정 없이 CI가 통과하는 걸 볼 수 있다.
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Python 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 의존성 설치
+        run: pip install -r requirements.txt
+
+      - name: pytest 실행 (23개 테스트)
+        run: pytest -v

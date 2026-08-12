@@ -1,20 +1,24 @@
 """
 Phase 5 FastAPI 백엔드 테스트 (목데이터, 실제 서버 기동 없이 로직 직접 검증)
 
+실행: pytest test_dashboard_api.py -v
+
 검증 항목:
   1. 사이클 실행 후 고위협 트랙이 있으면 awaiting_review=True로 바뀌는가
   2. /approve(approve) 호출 시 alert_sent=True가 되고 awaiting_review가 풀리는가
   3. 승인 이력이 audit_log.jsonl에 남는가 (pending -> approve)
   4. /status, /tracks 엔드포인트가 실제 HTTP 요청에도 정상 응답하는가 (TestClient)
 """
-import asyncio
 import os
 import sys
 from unittest.mock import patch
+import tempfile
+
+import pytest
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-AUDIT_LOG_TEST_PATH = "/tmp/test_dashboard_audit.jsonl"
+AUDIT_LOG_TEST_PATH = os.path.join(tempfile.gettempdir(), "test_dashboard_audit.jsonl")
 
 
 def _mock_high_threat_tracks():
@@ -26,7 +30,8 @@ def _mock_high_threat_tracks():
     ]
 
 
-async def _test_cycle_and_approve():
+@pytest.mark.asyncio
+async def test_cycle_and_approve():
     import audit_log
     audit_log.AUDIT_LOG_PATH = __import__("pathlib").Path(AUDIT_LOG_TEST_PATH)
     if os.path.exists(AUDIT_LOG_TEST_PATH):
@@ -94,9 +99,3 @@ def test_http_endpoints_smoke():
             r4 = client.post("/approve", json={"decision": "approve"})
             assert r4.status_code == 409, f"대기 중이 아닌데 /approve가 409를 안 줍니다: {r4.status_code}"
             print(f"✅ POST /approve (대기 없음) -> {r4.status_code} (의도된 실패)")
-
-
-if __name__ == "__main__":
-    asyncio.run(_test_cycle_and_approve())
-    test_http_endpoints_smoke()
-    print("\n🎉 Phase 5 FastAPI 백엔드 테스트 전체 통과")

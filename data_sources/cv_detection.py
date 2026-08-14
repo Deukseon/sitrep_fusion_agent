@@ -20,7 +20,13 @@ import sys
 from dataclasses import dataclass
 from typing import Optional
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(_PROJECT_ROOT)
+
+# [2026-08-13] 8장 스모크테스트용 사전학습 nano 모델(yolo26n-obb.pt)을
+# DOTA-v1.0 전체(2,806장, 150 epoch)로 파인튜닝한 small 모델로 교체.
+# 검증 결과: mAP50=0.628, mAP50-95=0.477 (train_dota_finetune.py, 진행기록.md 8절 참고)
+_FINETUNED_WEIGHTS = os.path.join(_PROJECT_ROOT, "models", "yolo26s_obb_dota_best.pt")
 
 _model_cache = {}
 
@@ -43,7 +49,7 @@ class CVDetection:
     source: str = "YOLO26-OBB(DOTA)"
 
 
-def _get_model(weights: str = "yolo26n-obb.pt"):
+def _get_model(weights: str = _FINETUNED_WEIGHTS):
     """모델은 한 번만 로드해서 캐시 (매번 새로 로드하면 느림)"""
     if weights not in _model_cache:
         from ultralytics import YOLO
@@ -65,7 +71,7 @@ def _pixel_to_latlon(px: float, py: float, img_w: int, img_h: int, bounds: GeoBo
 
 
 def detect_objects(image_path: str, bounds: GeoBounds, conf_threshold: float = 0.4,
-                    weights: str = "yolo26n-obb.pt") -> list[CVDetection]:
+                    weights: str = _FINETUNED_WEIGHTS) -> list[CVDetection]:
     """
     이미지 한 장에서 객체를 탐지하고, 각 탐지 결과를 위경도로 지리참조해서 반환.
 

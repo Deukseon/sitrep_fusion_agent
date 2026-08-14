@@ -20,3 +20,6 @@ venv/
 .vscode/
 *.swp
 track_history.json
+
+# DOTA 파인튜닝 학습 산출물 (수백MB, 재학습하면 다시 생성됨 - 최종 가중치만 models/에 별도 보관)
+runs/
